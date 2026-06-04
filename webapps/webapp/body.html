@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Observability</title>
+  <script src="https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"></script>
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Agent Observability
+      </div>
+      <div class="header-subtitle">Trace Debugger</div>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════ PASTE MODAL ══════════════════════════════ -->
+  <div id="modal-paste" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">Paste trace JSON</span>
+        <button id="btn-modal-close" class="btn-sm-ghost" aria-label="Close">✕</button>
+      </div>
+      <textarea id="inp-trace-json" class="trace-textarea"
+                placeholder="Paste dku_trace or dku_llm_mesh_extracted_trajectory JSON here…" spellcheck="false"></textarea>
+      <div id="paste-error" class="error-banner" style="display:none"></div>
+      <div class="modal-footer">
+        <button id="btn-modal-cancel" class="btn-ghost">Cancel</button>
+        <button id="btn-modal-analyze" class="btn-primary">Analyze</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ LIST VIEW ═══════════════════════════════ -->
+  <div id="view-list" class="view">
+
+    <div class="toolbar">
+      <div class="filter-row">
+
+        <div class="filter-group filter-group-dataset">
+          <label for="inp-dataset">Dataset</label>
+          <input list="datasets-list" id="inp-dataset" class="dataset-input"
+                 placeholder="Select or type a dataset…" autocomplete="off" />
+          <datalist id="datasets-list"></datalist>
+        </div>
+
+        <div class="filter-separator"></div>
+
+        <div class="filter-group">
+          <label for="sel-user">User</label>
+          <select id="sel-user"><option value="">All users</option></select>
+        </div>
+        <div class="filter-group">
+          <label for="sel-agent">Agent</label>
+          <select id="sel-agent"><option value="">All agents</option></select>
+        </div>
+        <div class="filter-group">
+          <label for="sel-conv">Conversation ID</label>
+          <select id="sel-conv"><option value="">All conversations</option></select>
+        </div>
+        <div class="filter-actions">
+          <button id="btn-apply" class="btn-primary">Apply</button>
+          <button id="btn-reset" class="btn-ghost">Reset</button>
+          <button id="btn-compare" class="btn-ghost" disabled>Compare</button>
+        </div>
+      </div>
+
+      <div class="filter-row ai-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="chk-explain" />
+          <span>AI Explanation</span>
+        </label>
+        <div id="llm-picker" class="llm-picker" style="display:none">
+          <select id="sel-llm" class="sel-llm">
+            <option value="">— select a model —</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="paste-hint">
+      or <button class="link-btn" id="btn-paste-trace">paste a trace directly</button>
+    </div>
+
+    <div id="list-status" class="status-bar"></div>
+    <div id="list-error" class="error-banner" style="display:none"></div>
+
+    <div class="table-wrapper">
+      <table id="messages-table">
+        <thead>
+          <tr>
+            <th class="chk-cell"></th>
+            <th>Message ID</th>
+            <th>Conversation ID</th>
+            <th>User</th>
+            <th>Agent</th>
+            <th>Begin time</th>
+            <th>Duration</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="messages-body">
+          <tr id="row-loading">
+            <td colspan="8" class="table-placeholder">
+              Select a dataset above to load messages.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════ DETAIL VIEW ══════════════════════════════ -->
+  <div id="view-detail" class="view" style="display:none">
+
+    <div class="detail-topbar">
+      <button id="btn-back" class="btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to list
+      </button>
+      <div id="detail-breadcrumb" class="breadcrumb"></div>
+    </div>
+
+    <div id="detail-error" class="error-banner" style="display:none"></div>
+    <div id="detail-loading" class="detail-loading" style="display:none">
+      <div class="spinner-inline"></div> Loading trace…
+    </div>
+
+    <div id="detail-content" style="display:none">
+
+      <!-- Message meta -->
+      <div class="section-card" id="sec-meta">
+        <div class="section-header">Message</div>
+        <div id="meta-grid" class="meta-grid"></div>
+      </div>
+
+      <!-- Time metrics -->
+      <div class="section-card">
+        <div class="section-header">Timing breakdown</div>
+        <div id="metrics-time" class="metrics-grid"></div>
+      </div>
+
+      <!-- Count metrics -->
+      <div class="section-card">
+        <div class="section-header">Call counts</div>
+        <div id="metrics-counts" class="metrics-grid metrics-grid-sm"></div>
+      </div>
+
+      <!-- Tool breakdown -->
+      <div class="section-card" id="sec-tools" style="display:none">
+        <div class="section-header">Tool execution breakdown</div>
+        <table class="inner-table" id="tools-table">
+          <thead>
+            <tr><th>Tool</th><th>Duration</th><th>% of total</th><th>Input</th><th>Output</th></tr>
+          </thead>
+          <tbody id="tools-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Agents -->
+      <div class="section-card" id="sec-agents" style="display:none">
+        <div class="section-header">Agents involved</div>
+        <div id="agents-list" class="tag-list"></div>
+      </div>
+
+      <!-- Execution Timeline -->
+      <div class="section-card" id="sec-timeline" style="display:none">
+        <div class="section-header">
+          Execution Timeline
+          <span id="tl-legend" class="tl-legend"></span>
+        </div>
+        <div id="timeline-canvas-wrap" class="timeline-canvas-wrap"></div>
+        <!-- Step detail panel -->
+        <div id="timeline-detail-panel" class="timeline-detail-panel" style="display:none">
+          <div class="tdp-header">
+            <div class="tdp-title-wrap">
+              <span class="tdp-type-dot" id="tdp-type-dot"></span>
+              <span class="tdp-title" id="tdp-title"></span>
+              <span class="tdp-badge" id="tdp-tool-type"></span>
+            </div>
+            <div class="tdp-meta-right">
+              <span id="tdp-duration" class="tdp-duration"></span>
+              <button id="tdp-close" class="btn-sm-ghost" aria-label="Close">✕</button>
+            </div>
+          </div>
+          <div class="tdp-body">
+            <div class="tdp-io">
+              <div class="tdp-io-col">
+                <div class="tdp-io-label">Input</div>
+                <pre id="tdp-input" class="tdp-pre"></pre>
+              </div>
+              <div class="tdp-io-col">
+                <div class="tdp-io-label">Output</div>
+                <pre id="tdp-output" class="tdp-pre"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Findings -->
+      <div class="section-card" id="sec-findings" style="display:none">
+        <div class="section-header">Findings</div>
+        <div id="findings-list"></div>
+      </div>
+
+      <!-- AI Explanation -->
+      <div class="section-card" id="sec-explain" style="display:none">
+        <div class="section-header">
+          AI Explanation
+          <span class="ai-badge">AI Generated</span>
+          <button id="btn-regen" class="btn-sm-ghost" style="margin-left:auto">Regenerate</button>
+        </div>
+        <div id="explain-loading" class="explain-loading" style="display:none">
+          <div class="spinner-inline"></div> Generating explanation…
+        </div>
+        <div id="explain-error" class="error-banner" style="display:none;margin:12px 20px 0"></div>
+        <div id="explain-body" class="explain-body"></div>
+      </div>
+
+      <!-- Raw trace -->
+      <div class="section-card">
+        <div class="section-header">
+          Raw trace
+          <button id="btn-copy-trace" class="btn-sm-ghost" style="margin-left:auto">Copy JSON</button>
+        </div>
+        <pre id="raw-trace" class="raw-trace"></pre>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════ COMPARE VIEW ═════════════════════════════ -->
+  <div id="view-compare" class="view" style="display:none">
+
+    <div class="detail-topbar">
+      <button id="btn-compare-back" class="btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to list
+      </button>
+      <div id="compare-breadcrumb" class="breadcrumb"></div>
+    </div>
+
+    <div id="compare-loading" class="detail-loading" style="display:none">
+      <div class="spinner-inline"></div> Loading traces…
+    </div>
+    <div id="compare-error" class="error-banner" style="display:none"></div>
+
+    <div id="compare-content" style="display:none">
+
+      <!-- Trace header cards -->
+      <div class="section-card">
+        <div class="section-header">Traces being compared</div>
+        <div id="compare-header-cards" class="compare-header-cards"></div>
+      </div>
+
+      <!-- Metrics comparison -->
+      <div class="section-card">
+        <div class="section-header">Metrics</div>
+        <div id="compare-metrics" class="compare-metrics-wrap"></div>
+      </div>
+
+      <!-- Tools breakdown table -->
+      <div class="section-card" id="sec-compare-tools" style="display:none">
+        <div class="section-header">Tool breakdown — click a row to diff inputs/outputs</div>
+        <table class="inner-table" id="compare-tools-table">
+          <thead><tr id="compare-tools-head"></tr></thead>
+          <tbody id="compare-tools-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Tool drill-down diff panel -->
+      <div class="section-card" id="sec-compare-drill" style="display:none">
+        <div class="section-header">
+          Diff — <span id="compare-drill-name" class="mono"></span>
+          <button id="btn-compare-drill-close" class="btn-sm-ghost" style="margin-left:auto">✕</button>
+        </div>
+        <div id="compare-drill-body"></div>
+      </div>
+
+      <!-- Findings comparison -->
+      <div class="section-card" id="sec-compare-findings" style="display:none">
+        <div class="section-header">Findings</div>
+        <div id="compare-findings-body" class="compare-findings-grid"></div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>
