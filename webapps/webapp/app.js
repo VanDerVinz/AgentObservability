@@ -518,7 +518,32 @@
     const secAgents = document.getElementById("sec-agents");
     const agentsList = document.getElementById("agents-list");
     if (m.agents && m.agents.length) {
-      agentsList.innerHTML = m.agents.map(a => `<span class="tag">${a}</span>`).join("");
+      agentsList.innerHTML = m.agents.map(function(a, idx) {
+        const msgs = (a.inputs && a.inputs.messages) || [];
+        const lastUser = [...msgs].reverse().find(msg => msg.role === "user");
+        const inputText = lastUser ? escHtml(lastUser.text || "") : "—";
+        const outputText = escHtml((a.outputs && a.outputs.text) || "—");
+        const allMsgs = msgs.map(msg =>
+          `<div class="agent-msg agent-msg-${escHtml(msg.role)}"><span class="agent-msg-role">${escHtml(msg.role)}</span><span class="agent-msg-text">${escHtml(msg.text || "")}</span></div>`
+        ).join("");
+        return `
+          <details class="agent-call-card">
+            <summary class="agent-call-summary">
+              <span class="tag">${escHtml(a.llmId)}</span>
+              <span class="agent-call-preview">${inputText.slice(0, 80)}${inputText.length > 80 ? "…" : ""}</span>
+            </summary>
+            <div class="agent-call-body">
+              <div class="agent-io-section">
+                <div class="agent-io-label">Input conversation</div>
+                <div class="agent-msgs">${allMsgs || '<span class="mono small">—</span>'}</div>
+              </div>
+              <div class="agent-io-section">
+                <div class="agent-io-label">Output</div>
+                <div class="agent-io-text">${outputText}</div>
+              </div>
+            </div>
+          </details>`;
+      }).join("");
       secAgents.style.display = "";
     } else {
       secAgents.style.display = "none";

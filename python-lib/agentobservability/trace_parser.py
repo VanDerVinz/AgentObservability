@@ -51,7 +51,7 @@ class ParsedTrace:
     root: Optional[Span]
     flat_spans: List[Span]
     events: List[Event]
-    agents: List[str]           # llmId values from LLM calls targeting SAVED_MODEL_AGENT (e.g. "agent:QBcN2Ifh:v1")
+    agents: List[dict]          # one dict per agent call: {llmId, inputs, outputs}
     available_tools: List[str]  # tool function names from completionQuerySettings
     executed_tool_calls: List[dict]  # one dict per DKU_MANAGED_TOOL_CALL span
 
@@ -179,18 +179,22 @@ def _collect_executed_tool_calls(root: Optional[Span]) -> List[dict]:
     return calls
 
 
-def _collect_agents(flat_spans: List[Span]) -> List[str]:
-    """Collect distinct agent IDs from LLM call spans that target a saved-model agent."""
-    seen = {}
+def _collect_agents(flat_spans: List[Span]) -> List[dict]:
+    """Collect agent calls from LLM call spans that target a saved-model agent."""
+    result = []
     for span in flat_spans:
         if span.span_type not in ("mesh_llm_call_streamed", "mesh_llm_call"):
             continue
         attrs = span.attributes or {}
         if attrs.get("llmProvider") == "SAVED_MODEL_AGENT":
             llm_id = attrs.get("llmId", "")
-            if llm_id and llm_id not in seen:
-                seen[llm_id] = True
-    return list(seen.keys())
+            if llm_id:
+                result.append({
+                    "llmId": llm_id,
+                    "inputs": span.inputs,
+                    "outputs": span.outputs,
+                })
+    return result
 
 
 def parse_trace(trace_json: dict) -> ParsedTrace:

@@ -463,6 +463,75 @@ tbody tr:last-child td { border-bottom: none; }
   font-weight: 500;
 }
 
+/* ── Agent call cards ───────────────────────────────────────── */
+.agent-call-card {
+  border-bottom: 1px solid var(--border);
+}
+.agent-call-card:last-child { border-bottom: none; }
+.agent-call-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.agent-call-summary::-webkit-details-marker { display: none; }
+.agent-call-preview {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.agent-call-body {
+  padding: 0 20px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.agent-io-section { display: flex; flex-direction: column; gap: 6px; }
+.agent-io-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.agent-msgs { display: flex; flex-direction: column; gap: 6px; }
+.agent-msg {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.agent-msg-role {
+  flex-shrink: 0;
+  width: 72px;
+  font-weight: 600;
+  color: var(--primary);
+  text-align: right;
+}
+.agent-msg-user .agent-msg-role   { color: var(--primary); }
+.agent-msg-assistant .agent-msg-role { color: #7c5cbf; }
+.agent-msg-text {
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.agent-io-text {
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-subtle, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
 /* ── Findings ───────────────────────────────────────────────── */
 .finding {
   border-bottom: 1px solid var(--border);
