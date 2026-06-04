@@ -1,7 +1,3 @@
-// Access the parameters that end-users filled in using webapp config
-// For example, for a parameter called "input_dataset"
-// input_dataset = dataiku.getWebAppConfig()['input_dataset']
-
 (function () {
   "use strict";
 
@@ -18,7 +14,6 @@
   const viewDetail = document.getElementById("view-detail");
 
   const inpDataset   = document.getElementById("inp-dataset");
-  const datasetsList = document.getElementById("datasets-list");
 
   const selUser  = document.getElementById("sel-user");
   const selAgent = document.getElementById("sel-agent");
@@ -265,11 +260,12 @@
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
-      datasetsList.innerHTML = "";
+      inpDataset.innerHTML = '<option value="">— select a dataset —</option>';
       (data.datasets || []).forEach(function (name) {
         const opt = document.createElement("option");
         opt.value = name;
-        datasetsList.appendChild(opt);
+        opt.textContent = name;
+        inpDataset.appendChild(opt);
       });
       // Auto-select when there is exactly one dataset
       if (data.datasets && data.datasets.length === 1) {
@@ -1296,8 +1292,3 @@
   loadLLMs();
 
 })();
-$.getJSON(getWebAppBackendUrl('/first_api_call'), function(data) {
-    console.log('Received data from backend', data)
-    const output = $('<pre />').text('Backend reply: ' + JSON.stringify(data));
-    $('body').append(output)
-});
