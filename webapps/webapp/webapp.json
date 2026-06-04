@@ -26,35 +26,6 @@
        For the full list and for more details, see the documentation: https://doc.dataiku.com/dss/latest/plugins/reference/params.html
     */
     "params": [
-        {
-            "name": "input_dataset",
-            "type": "DATASET",
-            "label": "Dataset",
-            "description": "",
-            "mandatory": true
-        },
-        {
-            "name": "input_column",
-            "type": "DATASET_COLUMN",
-            "datasetParamName": "input_dataset",
-            "label": "Column",
-            "description": "",
-            "mandatory": true
-        },
-        {
-            "name": "input_int",
-            "type": "INT",
-            "label": "Int",
-            "description": "",
-            "mandatory": true
-        },
-        {
-            "name": "input_string",
-            "type": "STRING",
-            "label": "String",
-            "description": "",
-            "mandatory": false
-        }
     ],
 
     /* roles define where this webapp will appear in DSS GUI. They are used to pre-fill a macro parameter with context.
