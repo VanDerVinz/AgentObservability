@@ -592,6 +592,7 @@
     // Reset timeline detail panel when switching traces
     hideTimelineDetail();
     renderTimeline(data.trajectory || null);
+    renderCallSequence(m, !!data.trajectory);
 
     generateExplanation();
   }
@@ -949,6 +950,81 @@
     if (t.includes("http") || t.includes("api") || t.includes("rest"))
       return { fill: "#d97706", stroke: "#b45309", text: "#fff" };
     return { fill: "#1a73e8", stroke: "#1557b0", text: "#fff" };
+  }
+
+  function renderCallSequence(m, hasTrajectory) {
+    const sec  = document.getElementById("sec-call-sequence");
+    const list = document.getElementById("call-sequence-list");
+    if (!sec || !list) return;
+
+    const seq = (m && m.call_sequence) || [];
+    // Show only when there is no trajectory and there are calls to display
+    if (hasTrajectory || !seq.length) {
+      sec.style.display = "none";
+      return;
+    }
+
+    list.innerHTML = seq.map(function(entry, i) {
+      const isAgent  = entry.type === "agent";
+      const typeLabel = isAgent ? "agent" : "tool";
+      const typeCls   = isAgent ? "cs-badge-agent" : "cs-badge-tool";
+      const label     = escHtml(entry.label);
+      const offset    = fmsDuration(entry.offset_ms);
+      const dur       = fmsDuration(entry.duration_ms);
+
+      // inputs summary
+      let inputSummary = "—";
+      if (isAgent) {
+        const msgs = (entry.inputs && entry.inputs.messages) || [];
+        const lastUser = [...msgs].reverse().find(function(msg) { return msg.role === "user"; });
+        if (lastUser) inputSummary = escHtml((lastUser.text || "").slice(0, 120));
+      } else if (entry.inputs && typeof entry.inputs === "object") {
+        const raw = JSON.stringify(entry.inputs);
+        inputSummary = escHtml(raw.slice(0, 120) + (raw.length > 120 ? "…" : ""));
+      }
+
+      // expanded inputs html
+      let inputsHtml = "";
+      if (isAgent) {
+        const msgs = (entry.inputs && entry.inputs.messages) || [];
+        inputsHtml = msgs.map(function(msg) {
+          return '<div class="agent-msg agent-msg-' + escHtml(msg.role) + '">' +
+            '<span class="agent-msg-role">' + escHtml(msg.role) + '</span>' +
+            '<span class="agent-msg-text">' + escHtml(msg.text || "") + '</span></div>';
+        }).join("") || "—";
+      } else {
+        inputsHtml = '<pre class="cs-pre">' + escHtml(JSON.stringify(entry.inputs, null, 2)) + '</pre>';
+      }
+
+      const outputText = isAgent
+        ? escHtml((entry.outputs && entry.outputs.text) || "—")
+        : escHtml(typeof entry.outputs === "string"
+            ? entry.outputs
+            : JSON.stringify(entry.outputs, null, 2));
+
+      return `
+        <details class="cs-row">
+          <summary class="cs-summary">
+            <span class="cs-index">${i + 1}</span>
+            <span class="cs-badge ${typeCls}">${typeLabel}</span>
+            <span class="cs-label">${label}</span>
+            <span class="cs-offset">+${offset}</span>
+            <span class="cs-dur">${dur}</span>
+          </summary>
+          <div class="cs-body">
+            <div class="agent-io-section">
+              <div class="agent-io-label">Input${isAgent ? " conversation" : ""}</div>
+              <div class="${isAgent ? "agent-msgs" : ""}">${inputsHtml}</div>
+            </div>
+            <div class="agent-io-section">
+              <div class="agent-io-label">Output</div>
+              <div class="agent-io-text">${outputText}</div>
+            </div>
+          </div>
+        </details>`;
+    }).join("");
+
+    sec.style.display = "";
   }
 
   function renderTimeline(traj) {

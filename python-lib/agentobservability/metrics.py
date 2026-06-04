@@ -119,6 +119,30 @@ def compute_metrics(parsed: ParsedTrace, total_duration_ms: int) -> dict:
     agent_call_count = sum(1 for s in flat if s.span_type == "agent_call")
     unique_tools_called = len({tc["name"] for tc in parsed.executed_tool_calls})
 
+    root_ts = parsed.root.begin_ts if parsed.root else 0.0
+    seq_events = []
+    for a in parsed.agents:
+        offset = round((a["begin_ts"] - root_ts) * 1000) if root_ts else 0
+        seq_events.append({
+            "type": "agent",
+            "label": a["llmId"],
+            "offset_ms": offset,
+            "duration_ms": round(a["duration_ms"]),
+            "inputs": a["inputs"],
+            "outputs": a["outputs"],
+        })
+    for tc in parsed.executed_tool_calls:
+        offset = round((tc["begin_ts"] - root_ts) * 1000) if root_ts else 0
+        seq_events.append({
+            "type": "tool",
+            "label": tc["name"],
+            "offset_ms": offset,
+            "duration_ms": round(tc["duration_ms"]),
+            "inputs": tc["inputs"],
+            "outputs": tc["outputs"],
+        })
+    call_sequence = sorted(seq_events, key=lambda e: e["offset_ms"])
+
     return {
         "total_duration_ms": total_duration_ms,
         "mesh_overhead_ms": round(mesh_overhead_ms),
@@ -126,6 +150,7 @@ def compute_metrics(parsed: ParsedTrace, total_duration_ms: int) -> dict:
         "tool_execution_ms": round(tool_execution_ms),
         "unique_tools_called": unique_tools_called,
         "agents": parsed.agents,
+        "call_sequence": call_sequence,
         "agent_call_count": agent_call_count,
         "iteration_count": iteration_count,
         "executed_tool_calls": parsed.executed_tool_calls,

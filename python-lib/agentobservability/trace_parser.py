@@ -165,6 +165,7 @@ def _collect_executed_tool_calls(root: Optional[Span]) -> List[dict]:
                     "name": name,
                     "tool_id": attrs.get("toolId", ""),
                     "tool_call_id": attrs.get("toolCallId", ""),
+                    "begin_ts": span.begin_ts,
                     "duration_ms": span.duration_ms,
                     "inputs": inputs,
                     "outputs": outputs,
@@ -191,6 +192,8 @@ def _collect_agents(flat_spans: List[Span]) -> List[dict]:
             if llm_id:
                 result.append({
                     "llmId": llm_id,
+                    "begin_ts": span.begin_ts,
+                    "duration_ms": span.duration_ms,
                     "inputs": span.inputs,
                     "outputs": span.outputs,
                 })

@@ -532,6 +532,85 @@ tbody tr:last-child td { border-bottom: none; }
   padding: 8px 12px;
 }
 
+/* ── Call Sequence ──────────────────────────────────────────── */
+.cs-row {
+  border-bottom: 1px solid var(--border);
+}
+.cs-row:last-child { border-bottom: none; }
+.cs-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.cs-summary::-webkit-details-marker { display: none; }
+.cs-index {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cs-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cs-badge-agent { background: #ede9f8; color: #7c5cbf; }
+.cs-badge-tool  { background: var(--primary-lt); color: var(--primary); }
+.cs-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cs-offset {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cs-dur {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 50px;
+  text-align: right;
+}
+.cs-body {
+  padding: 4px 20px 16px 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cs-pre {
+  font-size: 11px;
+  background: var(--bg-subtle, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ── Findings ───────────────────────────────────────────────── */
 .finding {
   border-bottom: 1px solid var(--border);
