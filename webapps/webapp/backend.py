@@ -17,10 +17,10 @@ import dataiku
 import pandas as pd
 from flask import request, jsonify, send_from_directory
 
-from lib.trace_adapter import extract_trace
-from lib.trace_parser import parse_trace
-from lib.metrics import compute_metrics
-from lib.rules import apply_rules
+from agentobservability.trace_adapter import extract_trace
+from agentobservability.trace_parser import parse_trace
+from agentobservability.metrics import compute_metrics
+from agentobservability.rules import apply_rules
 
 logger = logging.getLogger(__name__)
 
