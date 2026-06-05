@@ -120,28 +120,17 @@ def compute_metrics(parsed: ParsedTrace, total_duration_ms: int) -> dict:
     unique_tools_called = len({tc["name"] for tc in parsed.executed_tool_calls})
 
     root_ts = parsed.root.begin_ts if parsed.root else 0.0
-    seq_events = []
-    for a in parsed.agents:
-        offset = round((a["begin_ts"] - root_ts) * 1000) if root_ts else 0
-        seq_events.append({
-            "type": "agent",
-            "label": a["llmId"],
-            "offset_ms": offset,
-            "duration_ms": round(a["duration_ms"]),
-            "inputs": a["inputs"],
-            "outputs": a["outputs"],
-        })
-    for tc in parsed.executed_tool_calls:
-        offset = round((tc["begin_ts"] - root_ts) * 1000) if root_ts else 0
-        seq_events.append({
-            "type": "tool",
-            "label": tc["name"],
-            "offset_ms": offset,
-            "duration_ms": round(tc["duration_ms"]),
-            "inputs": tc["inputs"],
-            "outputs": tc["outputs"],
-        })
-    call_sequence = sorted(seq_events, key=lambda e: e["offset_ms"])
+    call_sequence = [
+        {
+            "type": entry["type"],
+            "label": entry["label"],
+            "offset_ms": round((entry["begin_ts"] - root_ts) * 1000) if root_ts and entry["begin_ts"] else 0,
+            "duration_ms": round(entry["duration_ms"]),
+            "inputs": entry["inputs"],
+            "outputs": entry["outputs"],
+        }
+        for entry in parsed.call_sequence
+    ]
 
     return {
         "total_duration_ms": total_duration_ms,
