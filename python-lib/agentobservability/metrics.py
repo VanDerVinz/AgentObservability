@@ -56,37 +56,15 @@ def _compute_provider_inference(root: Optional[Span]) -> float:
     return total
 
 
-def _compute_tool_execution(root: Optional[Span]) -> float:
-    """Sum durations of top-level agent_tool_calls spans only.
-    Spans nested inside a managed_tool_call are excluded to avoid double-counting
-    when a tool internally invokes a sub-agent with its own tool calls."""
-    if root is None:
-        return 0.0
-    total = 0.0
-
-    def walk(span: Span, inside_managed_tool: bool) -> None:
-        nonlocal total
-        if span.span_type == "managed_tool_call":
-            for child in span.children:
-                walk(child, True)
-        elif span.span_type == "agent_tool_calls":
-            if not inside_managed_tool:
-                total += span.duration_ms
-            # don't recurse: duration already includes all nested spans
-        else:
-            for child in span.children:
-                walk(child, inside_managed_tool)
-
-    walk(root, False)
-    return total
-
-
 def compute_metrics(parsed: ParsedTrace, total_duration_ms: int) -> dict:
     """Compute all metrics from a ParsedTrace. Pure function — no DSS imports."""
     flat = parsed.flat_spans
 
     provider_inference_ms = _compute_provider_inference(parsed.root)
-    tool_execution_ms = _compute_tool_execution(parsed.root)
+    # Keep this aligned with the "Tool breakdown" table, which shows the same
+    # executed tool calls. Using the higher-level agent_tool_calls wrapper would
+    # include orchestration/wait time and make the KPI disagree with the table.
+    tool_execution_ms = sum(tc["duration_ms"] for tc in parsed.executed_tool_calls)
 
     mesh_overhead_ms = _compute_mesh_overhead(parsed.root)
 
