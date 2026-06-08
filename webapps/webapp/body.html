@@ -25,8 +25,10 @@
         <span class="modal-title">Paste trace JSON</span>
         <button id="btn-modal-close" class="btn-sm-ghost" aria-label="Close">✕</button>
       </div>
-      <textarea id="inp-trace-json" class="trace-textarea"
-                placeholder="Paste dku_trace or dku_llm_mesh_extracted_trajectory JSON here…" spellcheck="false"></textarea>
+      <div id="trace-inputs" class="trace-inputs"></div>
+      <div class="trace-input-actions">
+        <button id="btn-add-trace" class="btn-ghost">Add another trace</button>
+      </div>
       <div id="paste-error" class="error-banner" style="display:none"></div>
       <div class="modal-footer">
         <button id="btn-modal-cancel" class="btn-ghost">Cancel</button>
@@ -166,6 +168,12 @@
       <div class="section-card" id="sec-agents" style="display:none">
         <div class="section-header">Agents involved</div>
         <div id="agents-list"></div>
+      </div>
+
+      <!-- Call Sequence -->
+      <div class="section-card" id="sec-call-sequence" style="display:none">
+        <div class="section-header">Call Sequence</div>
+        <div id="call-sequence-list"></div>
       </div>
 
       <!-- Execution Timeline -->

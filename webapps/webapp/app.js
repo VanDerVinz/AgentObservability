@@ -29,7 +29,8 @@
   const btnModalClose   = document.getElementById("btn-modal-close");
   const btnModalCancel  = document.getElementById("btn-modal-cancel");
   const btnModalAnalyze = document.getElementById("btn-modal-analyze");
-  const inpTraceJson    = document.getElementById("inp-trace-json");
+  const traceInputs     = document.getElementById("trace-inputs");
+  const btnAddTrace     = document.getElementById("btn-add-trace");
   const pasteError      = document.getElementById("paste-error");
 
   const chkExplain  = document.getElementById("chk-explain");
@@ -127,11 +128,97 @@
     if (prev) sel.value = prev;
   }
 
+  function createTraceEntry(value, idx) {
+    const wrap = document.createElement("div");
+    wrap.className = "trace-entry";
+
+    const head = document.createElement("div");
+    head.className = "trace-entry-head";
+
+    const title = document.createElement("span");
+    title.className = "trace-entry-title";
+    title.textContent = "Trace " + idx;
+    head.appendChild(title);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn-sm-ghost";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", function () {
+      if (!traceInputs) return;
+      if (traceInputs.children.length <= 1) {
+        const ta = wrap.querySelector(".trace-textarea");
+        if (ta) ta.value = "";
+        return;
+      }
+      wrap.remove();
+      refreshTraceEntryLabels();
+      refreshPasteActionLabel();
+    });
+    head.appendChild(remove);
+
+    const ta = document.createElement("textarea");
+    ta.className = "trace-textarea";
+    ta.placeholder = "Paste dku_trace or dku_llm_mesh_extracted_trajectory JSON here…";
+    ta.spellcheck = false;
+    ta.value = value || "";
+
+    wrap.appendChild(head);
+    wrap.appendChild(ta);
+    return wrap;
+  }
+
+  function refreshTraceEntryLabels() {
+    if (!traceInputs) return;
+    Array.from(traceInputs.children).forEach(function (entry, idx) {
+      const title = entry.querySelector(".trace-entry-title");
+      if (title) title.textContent = "Trace " + (idx + 1);
+    });
+  }
+
+  function refreshPasteActionLabel() {
+    if (!btnModalAnalyze || !traceInputs) return;
+    const count = Array.from(traceInputs.querySelectorAll(".trace-textarea"))
+      .filter(function (ta) { return ta.value.trim().length > 0; })
+      .length;
+    btnModalAnalyze.textContent = count > 1 ? "Compare" : "Analyze";
+  }
+
+  function resetTraceInputs(count) {
+    if (!traceInputs) return;
+    traceInputs.innerHTML = "";
+    const initialCount = Math.max(1, count || 1);
+    for (let i = 0; i < initialCount; i++) {
+      traceInputs.appendChild(createTraceEntry("", i + 1));
+    }
+    refreshPasteActionLabel();
+  }
+
+  function getTracePayloads() {
+    if (!traceInputs) return [];
+    return Array.from(traceInputs.querySelectorAll(".trace-textarea"))
+      .map(function (ta) { return ta.value.trim(); })
+      .filter(function (value) { return value.length > 0; })
+      .map(function (raw, idx) {
+        try {
+          return { value: JSON.parse(raw), idx: idx + 1 };
+        } catch (e) {
+          return { error: "Trace " + (idx + 1) + ": invalid JSON: " + e.message };
+        }
+      });
+  }
+
   // ── Paste trace modal ─────────────────────────────────────────────────────
   function openPasteModal() {
     pasteError.style.display = "none";
     modalPaste.style.display = "";
-    inpTraceJson.focus();
+    if (traceInputs && !traceInputs.children.length) {
+      resetTraceInputs(1);
+    } else {
+      refreshPasteActionLabel();
+    }
+    const first = traceInputs && traceInputs.querySelector(".trace-textarea");
+    if (first) first.focus();
   }
 
   function closePasteModal() {
@@ -140,46 +227,53 @@
 
   async function analyzePaste() {
     pasteError.style.display = "none";
-    const raw = inpTraceJson.value.trim();
-    if (!raw) {
-      pasteError.textContent = "Please paste a trace JSON first.";
+    const payloads = getTracePayloads();
+    if (!payloads.length) {
+      pasteError.textContent = "Please paste at least one trace JSON first.";
+      pasteError.style.display = "";
+      return;
+    }
+    const firstError = payloads.find(function (item) { return item.error; });
+    if (firstError) {
+      pasteError.textContent = firstError.error;
       pasteError.style.display = "";
       return;
     }
 
-    let traceJson;
-    try {
-      traceJson = JSON.parse(raw);
-    } catch (e) {
-      pasteError.textContent = "Invalid JSON: " + e.message;
-      pasteError.style.display = "";
-      return;
-    }
+    const traces = payloads.map(function (item) { return item.value; });
+    const isCompare = traces.length > 1;
 
     btnModalAnalyze.disabled = true;
-    btnModalAnalyze.textContent = "Analyzing…";
+    btnModalAnalyze.textContent = isCompare ? "Comparing…" : "Analyzing…";
 
     try {
-      const resp = await fetch(api("api/analyze-trace"), {
+      const endpoint = isCompare ? "api/compare-pasted" : "api/analyze-trace";
+      const body = isCompare ? { traces: traces } : { trace: traces[0] };
+      const resp = await fetch(api(endpoint), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trace: traceJson }),
+        body: JSON.stringify(body),
       });
       const data = await resp.json();
       if (!resp.ok || data.error) throw new Error(data.error || "HTTP " + resp.status);
       closePasteModal();
-      currentTraceJson = data;
-      showView("detail");
-      setDetailError(null);
-      detailLoading.style.display = "none";
-      detailContent.style.display = "none";
-      renderDetail(data);
+      resetTraceInputs(1);
+      if (isCompare) {
+        loadPastedCompare(data.traces || []);
+      } else {
+        currentTraceJson = data;
+        showView("detail");
+        setDetailError(null);
+        detailLoading.style.display = "none";
+        detailContent.style.display = "none";
+        renderDetail(data);
+      }
     } catch (e) {
       pasteError.textContent = "Analysis failed: " + e.message;
       pasteError.style.display = "";
     } finally {
       btnModalAnalyze.disabled = false;
-      btnModalAnalyze.textContent = "Analyze";
+      refreshPasteActionLabel();
     }
   }
 
@@ -592,6 +686,7 @@
     // Reset timeline detail panel when switching traces
     hideTimelineDetail();
     renderTimeline(data.trajectory || null);
+    renderCallSequence(m, !!data.trajectory);
 
     generateExplanation();
   }
@@ -637,6 +732,16 @@
     }
   }
 
+  function loadPastedCompare(traces) {
+    showView("compare");
+    compareLoading.style.display = "none";
+    compareError.style.display = "none";
+    compareBreadcrumb.textContent = "Comparing " + traces.length + " pasted trace" + (traces.length > 1 ? "s" : "");
+    compareData = { traces: traces };
+    activeDrillTool = null;
+    renderCompare(compareData);
+  }
+
   function renderCompare(data) {
     const traces = data.traces || [];
     renderCompareHeaders(traces);
@@ -656,7 +761,13 @@
     traces.forEach(function(t, i) {
       const msg = t.message || {};
       const m   = t.metrics  || {};
+      const traj = t.trajectory || {};
       const status = msg.status || "—";
+      const label = msg.message_id || ("Pasted trace " + (i + 1));
+      const duration = msg.duration_ms != null && msg.duration_ms !== 0
+        ? msg.duration_ms
+        : (m.total_duration_ms || traj.duration_ms || 0);
+      const agentLabel = msg.agent_id || traj.agent_id || "—";
       const sCls = status === "OK" || status === "SUCCESS" ? "badge-success"
                  : status === "ERROR" || status === "FAILED" ? "badge-error"
                  : "badge-neutral";
@@ -664,14 +775,15 @@
       card.className = "compare-trace-card";
       card.innerHTML =
         '<div class="ctc-index">Trace ' + (i + 1) + '</div>' +
-        '<div class="ctc-id mono">' + escHtml(truncate(msg.message_id || "—", 36)) + '</div>' +
+        '<div class="ctc-id mono">' + escHtml(truncate(label, 36)) + '</div>' +
         '<div class="ctc-rows">' +
-          '<div class="ctc-row"><span class="ctc-lbl">Agent</span><span class="mono small">' + escHtml(truncate(msg.agent_id || "—", 28)) + '</span></div>' +
+          '<div class="ctc-row"><span class="ctc-lbl">Agent</span><span class="mono small">' + escHtml(truncate(agentLabel, 28)) + '</span></div>' +
           '<div class="ctc-row"><span class="ctc-lbl">Status</span><span class="badge ' + sCls + '">' + escHtml(status) + '</span></div>' +
-          '<div class="ctc-row"><span class="ctc-lbl">Duration</span><strong>' + fmsDuration(msg.duration_ms || 0) + '</strong></div>' +
+          '<div class="ctc-row"><span class="ctc-lbl">Duration</span><strong>' + fmsDuration(duration) + '</strong></div>' +
           '<div class="ctc-row"><span class="ctc-lbl">Iterations</span>' + (m.iteration_count || 0) + '</div>' +
           '<div class="ctc-row"><span class="ctc-lbl">Tokens</span>' + (m.tokens_in || 0) + ' / ' + (m.tokens_out || 0) + '</div>' +
-        '</div>';
+        '</div>' +
+        (t.error ? '<div class="error-banner" style="margin:10px 0 0">' + escHtml(t.error) + '</div>' : '');
       container.appendChild(card);
     });
   }
@@ -949,6 +1061,81 @@
     if (t.includes("http") || t.includes("api") || t.includes("rest"))
       return { fill: "#d97706", stroke: "#b45309", text: "#fff" };
     return { fill: "#1a73e8", stroke: "#1557b0", text: "#fff" };
+  }
+
+  function renderCallSequence(m, hasTrajectory) {
+    const sec  = document.getElementById("sec-call-sequence");
+    const list = document.getElementById("call-sequence-list");
+    if (!sec || !list) return;
+
+    const seq = (m && m.call_sequence) || [];
+    // Show only when there is no trajectory and there are calls to display
+    if (hasTrajectory || !seq.length) {
+      sec.style.display = "none";
+      return;
+    }
+
+    list.innerHTML = seq.map(function(entry, i) {
+      const isAgent  = entry.type === "agent";
+      const typeLabel = isAgent ? "agent" : "tool";
+      const typeCls   = isAgent ? "cs-badge-agent" : "cs-badge-tool";
+      const label     = escHtml(entry.label);
+      const offset    = fmsDuration(entry.offset_ms);
+      const dur       = fmsDuration(entry.duration_ms);
+
+      // inputs summary
+      let inputSummary = "—";
+      if (isAgent) {
+        const msgs = (entry.inputs && entry.inputs.messages) || [];
+        const lastUser = [...msgs].reverse().find(function(msg) { return msg.role === "user"; });
+        if (lastUser) inputSummary = escHtml((lastUser.text || "").slice(0, 120));
+      } else if (entry.inputs && typeof entry.inputs === "object") {
+        const raw = JSON.stringify(entry.inputs);
+        inputSummary = escHtml(raw.slice(0, 120) + (raw.length > 120 ? "…" : ""));
+      }
+
+      // expanded inputs html
+      let inputsHtml = "";
+      if (isAgent) {
+        const msgs = (entry.inputs && entry.inputs.messages) || [];
+        inputsHtml = msgs.map(function(msg) {
+          return '<div class="agent-msg agent-msg-' + escHtml(msg.role) + '">' +
+            '<span class="agent-msg-role">' + escHtml(msg.role) + '</span>' +
+            '<span class="agent-msg-text">' + escHtml(msg.text || "") + '</span></div>';
+        }).join("") || "—";
+      } else {
+        inputsHtml = '<pre class="cs-pre">' + escHtml(JSON.stringify(entry.inputs, null, 2)) + '</pre>';
+      }
+
+      const outputText = isAgent
+        ? escHtml((entry.outputs && entry.outputs.text) || "—")
+        : escHtml(typeof entry.outputs === "string"
+            ? entry.outputs
+            : JSON.stringify(entry.outputs, null, 2));
+
+      return `
+        <details class="cs-row">
+          <summary class="cs-summary">
+            <span class="cs-index">${i + 1}</span>
+            <span class="cs-badge ${typeCls}">${typeLabel}</span>
+            <span class="cs-label">${label}</span>
+            <span class="cs-offset">+${offset}</span>
+            <span class="cs-dur">${dur}</span>
+          </summary>
+          <div class="cs-body">
+            <div class="agent-io-section">
+              <div class="agent-io-label">Input${isAgent ? " conversation" : ""}</div>
+              <div class="${isAgent ? "agent-msgs" : ""}">${inputsHtml}</div>
+            </div>
+            <div class="agent-io-section">
+              <div class="agent-io-label">Output</div>
+              <div class="agent-io-text">${outputText}</div>
+            </div>
+          </div>
+        </details>`;
+    }).join("");
+
+    sec.style.display = "";
   }
 
   function renderTimeline(traj) {
@@ -1238,15 +1425,30 @@
   if (btnModalClose)   btnModalClose.addEventListener("click", closePasteModal);
   if (btnModalCancel)  btnModalCancel.addEventListener("click", closePasteModal);
   if (btnModalAnalyze) btnModalAnalyze.addEventListener("click", analyzePaste);
+  if (btnAddTrace) {
+    btnAddTrace.addEventListener("click", function () {
+      if (!traceInputs) return;
+      const nextIdx = traceInputs.children.length + 1;
+      traceInputs.appendChild(createTraceEntry("", nextIdx));
+      refreshTraceEntryLabels();
+      refreshPasteActionLabel();
+      const last = traceInputs.lastElementChild && traceInputs.lastElementChild.querySelector(".trace-textarea");
+      if (last) last.focus();
+    });
+  }
   if (modalPaste) {
     modalPaste.addEventListener("click", function (e) {
       if (e.target === modalPaste) closePasteModal();
     });
   }
-  if (inpTraceJson) {
-    inpTraceJson.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyzePaste();
+  if (traceInputs) {
+    traceInputs.addEventListener("keydown", function (e) {
+      const target = e.target;
+      if (target && target.classList && target.classList.contains("trace-textarea")) {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyzePaste();
+      }
     });
+    traceInputs.addEventListener("input", refreshPasteActionLabel);
   }
 
   if (chkExplain) {

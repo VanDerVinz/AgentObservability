@@ -109,6 +109,37 @@ def _normalize_trajectory(traj):
     }
 
 
+def _analyze_raw_trace(raw):
+    """Analyze a raw trace or trajectory dict into the frontend response shape."""
+    if not isinstance(raw, dict):
+        raise ValueError("Expected a JSON object")
+
+    # Auto-detect: trajectory JSON contains "agentLoop"
+    if "agentLoop" in raw:
+        trajectory = _normalize_trajectory(raw)
+        return {
+            "message": None,
+            "metrics": {},
+            "findings": [],
+            "trajectory": trajectory,
+        }
+
+    parsed = parse_trace(raw)
+    total_ms = int(parsed.root.duration_ms) if parsed.root else 0
+    metrics = compute_metrics(parsed, total_ms)
+    findings = apply_rules(parsed, metrics)
+
+    return {
+        "message": None,
+        "metrics": metrics,
+        "findings": [
+            {"severity": f.severity, "code": f.code, "message": f.message, "evidence": f.evidence}
+            for f in findings
+        ],
+        "trajectory": None,
+    }
+
+
 @app.route("/api/analyze-trace", methods=["POST"])
 def api_analyze_trace():
     """Analyze a raw trace or trajectory JSON pasted directly by the user (no dataset needed)."""
@@ -123,30 +154,7 @@ def api_analyze_trace():
         if not isinstance(raw, dict):
             return jsonify({"error": "Expected a JSON object"}), 400
 
-        # Auto-detect: trajectory JSON contains "agentLoop"
-        if "agentLoop" in raw:
-            trajectory = _normalize_trajectory(raw)
-            return jsonify({
-                "message": None,
-                "metrics": {},
-                "findings": [],
-                "trajectory": trajectory,
-            })
-
-        parsed = parse_trace(raw)
-        total_ms = int(parsed.root.duration_ms) if parsed.root else 0
-        metrics = compute_metrics(parsed, total_ms)
-        findings = apply_rules(parsed, metrics)
-
-        return jsonify({
-            "message": None,
-            "metrics": metrics,
-            "findings": [
-                {"severity": f.severity, "code": f.code, "message": f.message, "evidence": f.evidence}
-                for f in findings
-            ],
-            "trajectory": None,
-        })
+        return jsonify(_analyze_raw_trace(raw))
     except Exception as e:
         logger.exception("Error in /api/analyze-trace")
         return jsonify({"error": str(e)}), 500
@@ -419,6 +427,39 @@ def api_compare():
         return jsonify({"traces": results})
     except Exception as e:
         logger.exception("Error in /api/compare")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/compare-pasted", methods=["POST"])
+def api_compare_pasted():
+    """Compare multiple pasted traces side by side."""
+    try:
+        body = request.get_json(force=True, silent=True)
+        if not body:
+            return jsonify({"error": "Invalid or empty JSON body"}), 400
+
+        raw_traces = body.get("traces") if isinstance(body, dict) and "traces" in body else body
+        if not isinstance(raw_traces, list):
+            return jsonify({"error": "Expected an array of traces"}), 400
+        if len(raw_traces) < 2:
+            return jsonify({"error": "At least 2 traces are required"}), 400
+
+        traces = []
+        for idx, raw in enumerate(raw_traces):
+            try:
+                traces.append(_analyze_raw_trace(raw))
+            except Exception as e:
+                traces.append({
+                    "message": None,
+                    "metrics": {},
+                    "findings": [],
+                    "trajectory": None,
+                    "error": f"Trace {idx + 1}: {e}",
+                })
+
+        return jsonify({"traces": traces})
+    except Exception as e:
+        logger.exception("Error in /api/compare-pasted")
         return jsonify({"error": str(e)}), 500
 
 

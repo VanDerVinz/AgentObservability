@@ -52,6 +52,7 @@ class ParsedTrace:
     flat_spans: List[Span]
     events: List[Event]
     agents: List[dict]          # one dict per agent call: {llmId, inputs, outputs}
+    call_sequence: List[dict]   # agents + tools interleaved in chronological tree order
     available_tools: List[str]  # tool function names from completionQuerySettings
     executed_tool_calls: List[dict]  # one dict per DKU_MANAGED_TOOL_CALL span
 
@@ -165,6 +166,7 @@ def _collect_executed_tool_calls(root: Optional[Span]) -> List[dict]:
                     "name": name,
                     "tool_id": attrs.get("toolId", ""),
                     "tool_call_id": attrs.get("toolCallId", ""),
+                    "begin_ts": span.begin_ts,
                     "duration_ms": span.duration_ms,
                     "inputs": inputs,
                     "outputs": outputs,
@@ -191,10 +193,60 @@ def _collect_agents(flat_spans: List[Span]) -> List[dict]:
             if llm_id:
                 result.append({
                     "llmId": llm_id,
+                    "begin_ts": span.begin_ts,
+                    "duration_ms": span.duration_ms,
                     "inputs": span.inputs,
                     "outputs": span.outputs,
                 })
     return result
+
+
+def _build_call_sequence(root: Optional[Span]) -> List[dict]:
+    """Walk the span tree in DFS order and record agent and tool calls as encountered.
+
+    DFS tree order is chronological: children appear in the order they occurred,
+    so this avoids sorting by begin_ts which breaks when timestamps are missing (0).
+    Tool calls nested inside another managed_tool_call are excluded (same rule as
+    _collect_executed_tool_calls) so sub-agent internal tools stay under their agent entry.
+    """
+    if root is None:
+        return []
+    sequence = []
+
+    def walk(span: Span, inside_managed_tool: bool) -> None:
+        attrs = span.attributes or {}
+        is_agent = (
+            span.span_type in ("mesh_llm_call_streamed", "mesh_llm_call")
+            and attrs.get("llmProvider") == "SAVED_MODEL_AGENT"
+        )
+        is_tool = span.span_type == "managed_tool_call" and not inside_managed_tool
+
+        if is_agent:
+            sequence.append({
+                "type": "agent",
+                "label": attrs.get("llmId", ""),
+                "begin_ts": span.begin_ts,
+                "duration_ms": span.duration_ms,
+                "inputs": span.inputs,
+                "outputs": span.outputs,
+            })
+        elif is_tool:
+            name = attrs.get("toolFunctionName") or attrs.get("toolId") or span.name
+            sequence.append({
+                "type": "tool",
+                "label": name,
+                "begin_ts": span.begin_ts,
+                "duration_ms": span.duration_ms,
+                "inputs": (span.inputs or {}).get("input", span.inputs or {}),
+                "outputs": (span.outputs or {}).get("output", ""),
+            })
+
+        next_inside = True if is_tool else inside_managed_tool
+        for child in span.children:
+            walk(child, next_inside)
+
+    walk(root, False)
+    return sequence
 
 
 def parse_trace(trace_json: dict) -> ParsedTrace:
@@ -213,6 +265,7 @@ def parse_trace(trace_json: dict) -> ParsedTrace:
         flat_spans=flat_spans,
         events=events,
         agents=_collect_agents(flat_spans),
+        call_sequence=_build_call_sequence(root),
         available_tools=_collect_available_tools(flat_spans),
         executed_tool_calls=_collect_executed_tool_calls(root),
     )
