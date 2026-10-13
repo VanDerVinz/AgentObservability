@@ -745,6 +745,7 @@
   function renderCompare(data) {
     const traces = data.traces || [];
     renderCompareHeaders(traces);
+    renderCompareAgentIo(traces);
     renderCompareMetrics(traces);
     renderCompareTools(traces);
     renderCompareFindings(traces);
@@ -831,10 +832,7 @@
   }
 
   function _toolHasIoDiff(toolName, traces) {
-    const callSets = traces.map(function(t) {
-      const entry = (t.metrics.tool_breakdown || []).find(function(tb) { return tb.name === toolName; });
-      return entry ? entry.calls : [];
-    });
+    const callSets = traces.map(function(t) { return compareToolCalls(t, toolName); });
     const counts = callSets.map(function(cs) { return cs.length; });
     if (new Set(counts).size > 1) return true;
     const max = Math.max.apply(null, counts);
@@ -855,14 +853,25 @@
 
     const allTools = new Set();
     traces.forEach(function(t) {
-      (t.metrics.tool_breakdown || []).forEach(function(tb) { allTools.add(tb.name); });
+      ((t.metrics || {}).tool_breakdown || []).forEach(function(tb) { allTools.add(tb.name); });
+      ((t.trajectory || {}).steps || []).forEach(function(step) {
+        if (step.type === "TOOLCALL") allTools.add(step.tool_function_name || step.tool_name || "Unnamed tool");
+      });
     });
     if (!allTools.size) { sec.style.display = "none"; return; }
     sec.style.display = "";
 
     const toolIndex = traces.map(function(t) {
       const idx = {};
-      (t.metrics.tool_breakdown || []).forEach(function(tb) { idx[tb.name] = tb; });
+      ((t.metrics || {}).tool_breakdown || []).forEach(function(tb) { idx[tb.name] = tb; });
+      allTools.forEach(function(name) {
+        if (idx[name]) return;
+        const calls = compareToolCalls(t, name);
+        if (calls.length) idx[name] = {
+          calls: calls, call_count: calls.length,
+          total_duration_ms: calls.reduce(function(total, c) { return total + (c.duration_ms || 0); }, 0)
+        };
+      });
       return idx;
     });
 
@@ -909,37 +918,40 @@
     });
   }
 
-  function renderLineDiff(strA, strB) {
-    if (strA === strB) {
-      return '<pre class="diff-pre diff-pre-same"><span class="diff-equal">' + escHtml(strA || "—") + '</span></pre>';
-    }
-    if (!window.Diff || !window.Diff.diffLines) {
-      return '<pre class="diff-pre"><span class="diff-equal">' + escHtml(strB || "—") + '</span></pre>';
-    }
-    const changes = Diff.diffLines(strA, strB);
-    let out = '<pre class="diff-pre">';
-    changes.forEach(function(part) {
-      const cls = part.added ? "diff-add" : part.removed ? "diff-remove" : "diff-equal";
-      out += '<span class="' + cls + '">' + escHtml(part.value) + '</span>';
-    });
-    out += '</pre>';
-    return out;
+  function compareIoCell(value, missing, finalAnswer) {
+    if (value == null) return '<span class="cmp-absent">' + escHtml(missing) + '</span>';
+    return '<pre class="compare-io-value' + (finalAnswer ? ' compare-final-answer' : '') + '">' +
+      escHtml(toStr(value)) + '</pre>';
   }
 
-  function renderDiffBlock(values, traces) {
-    const strs = values.map(toStr);
-    if (traces.length === 1) {
-      return '<pre class="diff-pre diff-pre-same"><span class="diff-equal">' + escHtml(strs[0] || "—") + '</span></pre>';
-    }
-    if (traces.length === 2) {
-      return renderLineDiff(strs[0], strs[1]);
-    }
-    let html = "";
-    for (let i = 1; i < traces.length; i++) {
-      html += '<div class="diff-pair-header">T1 vs T' + (i + 1) + '</div>';
-      html += renderLineDiff(strs[0], strs[i]);
-    }
-    return html;
+  function compareTraceLabel(trace, index) {
+    const msg = trace.message || {};
+    return '<span class="drill-trace-lbl">T' + (index + 1) + '</span>' +
+      (msg.message_id ? '<div class="compare-io-id mono">' + escHtml(msg.message_id) + '</div>' : '') +
+      (trace.error ? '<div class="error-banner">' + escHtml(trace.error) + '</div>' : '');
+  }
+
+  function renderCompareAgentIo(traces) {
+    const container = document.getElementById("compare-agent-io");
+    if (!container) return;
+    let html = '<table class="compare-io-table"><thead><tr><th scope="col">Trace</th>' +
+      '<th scope="col">Initial query</th><th scope="col">Agent final answer</th></tr></thead><tbody>';
+    traces.forEach(function(t, i) {
+      html += '<tr><th scope="row">' + compareTraceLabel(t, i) + '</th><td>' +
+        compareIoCell(t.initial_input, "Initial query not captured") + '</td><td>' +
+        compareIoCell(t.final_answer, "Final answer not captured", true) + '</td></tr>';
+    });
+    container.innerHTML = html + '</tbody></table>';
+  }
+
+  function compareToolCalls(trace, toolName) {
+    const entry = ((trace.metrics || {}).tool_breakdown || []).find(function(tb) { return tb.name === toolName; });
+    if (entry) return entry.calls || [];
+    return ((trace.trajectory || {}).steps || []).filter(function(step) {
+      return step.type === "TOOLCALL" && (step.tool_function_name || step.tool_name || "Unnamed tool") === toolName;
+    }).map(function(step) {
+      return { inputs: step.input, outputs: step.output, duration_ms: step.duration_ms };
+    });
   }
 
   function toggleCompareDrill(toolName, traces, rowEl) {
@@ -962,43 +974,24 @@
     if (rowEl) rowEl.classList.add("drill-active");
     if (nameEl) nameEl.textContent = toolName;
 
-    const callSets = traces.map(function(t) {
-      const entry = (t.metrics.tool_breakdown || []).find(function(tb) { return tb.name === toolName; });
-      return entry ? entry.calls : [];
-    });
+    const callSets = traces.map(function(t) { return compareToolCalls(t, toolName); });
     const maxCalls = Math.max.apply(null, callSets.map(function(cs) { return cs.length; }));
 
-    let html = "";
+    let html = '<p class="compare-io-help">Calls are aligned by occurrence within this tool. The final answer is the overall agent response for each trace.</p>';
     for (let ci = 0; ci < maxCalls; ci++) {
-      const calls = callSets.map(function(cs) { return cs[ci] || null; });
-
-      html += '<div class="drill-call">';
-      html += '<div class="drill-call-header">Call #' + (ci + 1) + '</div>';
-
-      // Duration per trace
-      html += '<div class="drill-dur-row">';
+      html += '<div class="drill-call"><div class="drill-call-header">Call #' + (ci + 1) + '</div>';
+      html += '<div class="compare-io-wrap"><table class="compare-io-table"><thead><tr>' +
+        '<th scope="col">Trace</th><th scope="col">Input</th><th scope="col">Output</th>' +
+        '<th scope="col">Agent final answer</th></tr></thead><tbody>';
       traces.forEach(function(t, ti) {
-        const call = calls[ti];
-        html += '<div class="drill-dur-item">';
-        html += '<span class="drill-trace-lbl">T' + (ti + 1) + '</span>';
-        html += call ? fmsDuration(call.duration_ms) : '<span class="cmp-absent">not called</span>';
-        html += '</div>';
+        const call = callSets[ti][ci];
+        html += '<tr><th scope="row">' + compareTraceLabel(t, ti) +
+          '<div class="compare-io-duration">' + (call ? fmsDuration(call.duration_ms) : 'Not called') + '</div></th>';
+        html += '<td>' + compareIoCell(call ? call.inputs : null, call ? 'Input not captured' : 'Not called') + '</td>';
+        html += '<td>' + compareIoCell(call ? call.outputs : null, call ? 'Output not captured' : 'Not called') + '</td>';
+        html += '<td>' + compareIoCell(t.final_answer, 'Final answer not captured', true) + '</td></tr>';
       });
-      html += '</div>';
-
-      // Input diff
-      html += '<div class="drill-diff-section">';
-      html += '<div class="drill-diff-label">Input</div>';
-      html += renderDiffBlock(calls.map(function(c) { return c ? c.inputs : null; }), traces);
-      html += '</div>';
-
-      // Output diff
-      html += '<div class="drill-diff-section">';
-      html += '<div class="drill-diff-label">Output</div>';
-      html += renderDiffBlock(calls.map(function(c) { return c ? c.outputs : null; }), traces);
-      html += '</div>';
-
-      html += '</div>';
+      html += '</tbody></table></div></div>';
     }
 
     body.innerHTML = html;

@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent Observability</title>
-  <script src="https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"></script>
 </head>
 <body>
 
@@ -268,6 +267,11 @@
         <div id="compare-header-cards" class="compare-header-cards"></div>
       </div>
 
+      <div class="section-card">
+        <div class="section-header">Agent query and final answer</div>
+        <div id="compare-agent-io" class="compare-io-wrap"></div>
+      </div>
+
       <!-- Metrics comparison -->
       <div class="section-card">
         <div class="section-header">Metrics</div>
@@ -276,17 +280,17 @@
 
       <!-- Tools breakdown table -->
       <div class="section-card" id="sec-compare-tools" style="display:none">
-        <div class="section-header">Tool breakdown — click a row to diff inputs/outputs</div>
+        <div class="section-header">Tool breakdown — click a row to compare inputs and outputs</div>
         <table class="inner-table" id="compare-tools-table">
           <thead><tr id="compare-tools-head"></tr></thead>
           <tbody id="compare-tools-body"></tbody>
         </table>
       </div>
 
-      <!-- Tool drill-down diff panel -->
+      <!-- Tool drill-down comparison panel -->
       <div class="section-card" id="sec-compare-drill" style="display:none">
         <div class="section-header">
-          Diff — <span id="compare-drill-name" class="mono"></span>
+          Tool comparison — <span id="compare-drill-name" class="mono"></span>
           <button id="btn-compare-drill-close" class="btn-sm-ghost" style="margin-left:auto">✕</button>
         </div>
         <div id="compare-drill-body"></div>

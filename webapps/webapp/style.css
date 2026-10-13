@@ -1185,19 +1185,6 @@ tbody tr:last-child td { border-bottom: none; }
   color: var(--text-muted);
   margin-bottom: 10px;
 }
-.drill-dur-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-.drill-dur-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
 .drill-trace-lbl {
   font-size: 10px;
   font-weight: 700;
@@ -1207,45 +1194,38 @@ tbody tr:last-child td { border-bottom: none; }
   border-radius: 3px;
   letter-spacing: 0.3px;
 }
-.drill-diff-section { margin-bottom: 14px; }
-.drill-diff-section:last-child { margin-bottom: 0; }
-.drill-diff-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+/* Full values for all selected traces, including long tool results. */
+.compare-io-wrap { overflow-x: auto; }
+.compare-io-table { width: 100%; min-width: 850px; table-layout: fixed; border-collapse: collapse; }
+.compare-io-table th, .compare-io-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  vertical-align: top;
+  text-align: left;
 }
-.diff-pair-header {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 600;
-  margin: 10px 0 4px;
-}
-
-/* ── Diff blocks ────────────────────────────────────────────── */
-.diff-pre {
+.compare-io-table th:last-child, .compare-io-table td:last-child { border-right: none; }
+.compare-io-table thead th { background: #F8F4E4; color: #06312E; font-size: 12px; }
+.compare-io-table th:first-child { width: 110px; }
+.compare-io-id { margin-top: 8px; font-size: 11px; overflow-wrap: anywhere; font-weight: 400; }
+.compare-io-duration { margin-top: 8px; font-size: 12px; font-weight: 400; }
+.compare-io-value {
+  margin: 0;
+  padding: 10px;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.55;
-  padding: 10px 12px;
-  background: #f8fafc;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #FFFEF9;
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: auto;
-  max-height: 320px;
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
-.diff-pre-same {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-}
-.diff-add    { background: #dcfce7; color: #166534; display: block; }
-.diff-remove { background: #fee2e2; color: #991b1b; display: block; }
-.diff-equal  { display: block; color: var(--text-muted); }
+.compare-final-answer { font-family: var(--font); font-size: 13px; }
+.compare-io-help { margin: 12px 20px; color: var(--text-muted); font-size: 12px; }
 
 /* ── Findings comparison ────────────────────────────────────── */
 .compare-findings-grid { display: flex; flex-wrap: wrap; }

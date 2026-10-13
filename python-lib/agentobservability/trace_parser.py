@@ -269,3 +269,34 @@ def parse_trace(trace_json: dict) -> ParsedTrace:
         available_tools=_collect_available_tools(flat_spans),
         executed_tool_calls=_collect_executed_tool_calls(root),
     )
+
+
+def comparison_io(parsed: ParsedTrace) -> dict:
+    """Read the outer agent conversation, never an internal tool or LLM iteration."""
+    candidates = []
+
+    def walk(span):
+        if span is None or span.span_type in (
+            "managed_tool_call", "python_tool_call", "agent_iteration", "agent_llm_call"
+        ):
+            return
+        if (span is parsed.root or span.span_type in ("mesh_query", "agent_call")
+                or span.attributes.get("llmProvider") == "SAVED_MODEL_AGENT"):
+            candidates.append(span)
+        for child in span.children:
+            walk(child)
+
+    walk(parsed.root)
+    initial_input = None
+    final_answer = None
+    for span in candidates:
+        inputs = span.inputs if isinstance(span.inputs, dict) else {}
+        outputs = span.outputs if isinstance(span.outputs, dict) else {}
+        if initial_input is None:
+            users = [m for m in (inputs.get("messages") or [])
+                     if isinstance(m, dict) and m.get("role") == "user"]
+            if users:
+                initial_input = users[-1].get("text", users[-1].get("content"))
+        if final_answer is None and outputs.get("text") is not None:
+            final_answer = outputs["text"]
+    return {"initial_input": initial_input, "final_answer": final_answer}

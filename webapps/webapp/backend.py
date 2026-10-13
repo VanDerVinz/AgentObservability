@@ -18,7 +18,7 @@ import pandas as pd
 from flask import request, jsonify, send_from_directory
 
 from agentobservability.trace_adapter import extract_trace
-from agentobservability.trace_parser import parse_trace
+from agentobservability.trace_parser import parse_trace, comparison_io
 from agentobservability.metrics import compute_metrics
 from agentobservability.rules import apply_rules
 
@@ -122,6 +122,8 @@ def _analyze_raw_trace(raw):
             "metrics": {},
             "findings": [],
             "trajectory": trajectory,
+            "initial_input": trajectory["input"],
+            "final_answer": trajectory["output"],
         }
 
     parsed = parse_trace(raw)
@@ -137,6 +139,7 @@ def _analyze_raw_trace(raw):
             for f in findings
         ],
         "trajectory": None,
+        **comparison_io(parsed),
     }
 
 
@@ -397,16 +400,26 @@ def api_compare():
         for mid in message_ids:
             norm = id_to_norm.get(mid)
             if norm is None:
-                results.append({"message_id": mid, "error": f"Message '{mid}' not found"})
+                results.append({"message": {"message_id": mid}, "error": f"Message '{mid}' not found"})
                 continue
             metrics = {}
             findings = []
+            io = {"initial_input": None, "final_answer": None}
+            trajectory = _normalize_trajectory(norm["trajectory"])
             if norm["trace"] is not None:
                 parsed = parse_trace(norm["trace"])
                 total_ms = norm["duration_ms"] or (int(parsed.root.duration_ms) if parsed.root else 0)
                 metrics = compute_metrics(parsed, total_ms)
                 findings = apply_rules(parsed, metrics)
+                io = comparison_io(parsed)
+            if trajectory:
+                if trajectory["input"] is not None:
+                    io["initial_input"] = trajectory["input"]
+                if trajectory["output"] is not None:
+                    io["final_answer"] = trajectory["output"]
             results.append({
+                **io,
+                "trajectory": trajectory,
                 "message": {
                     "message_id": norm["message_id"],
                     "conversation_id": norm["conversation_id"],
